@@ -10,7 +10,22 @@ load_dotenv()
 # この関数は、ユーザーの入力(user_question)と、専門家の選択(expert_choice)を
 # 引数として受け取り、LLMからの回答を返す
 def get_llm_response(user_question, expert_choice):
-    # ラジオボタンの選択に応じて、LLMの役割（システムメッセージ）を変える
+    
+    # StreamlitのSecretsからAPIキーを直接読み込む
+    try:
+        # Streamlit CloudのSecretsから読み込みを試みる
+        api_key = st.secrets["OPENAI_API_KEY"]
+    except (KeyError, FileNotFoundError):
+        # 失敗した場合（ローカル実行時など）は、.envから読み込まれた環境変数を使う
+        # このためには import os が必要
+        import os
+        api_key = os.getenv("OPENAI_API_KEY")
+
+    if not api_key:
+        st.error("OpenAIのAPIキーが設定されていません。")
+        return "APIキーが設定されていないため、回答を生成できません。"
+    # ★★★ ここまで修正 ★★★
+
     if expert_choice == "ITコンサルタント":
         system_message = "あなたは優秀なITコンサルタントです。専門用語を避け、初心者にも分かりやすく回答してください。"
     elif expert_choice == "恋愛カウンセラー":
@@ -18,26 +33,24 @@ def get_llm_response(user_question, expert_choice):
     elif expert_choice == "シェフ":
         system_message = "あなたは一流のシェフです。家庭でも作れる簡単なレシピのアイデアを提案してください。"
     else:
-        # 万が一、予期せぬ選択があった場合のデフォルト設定
         system_message = "あなたは親切なアシスタントです。"
 
-    # --- LangChainのコード（Lesson8参考） ---
-    # LLMモデル（gpt-4o-mini）を準備する
-    llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.7)
+    # ★★★ ChatOpenAIの初期化部分を修正 ★★★
+    llm = ChatOpenAI(
+        api_key=api_key, 
+        model_name="gpt-4o-mini", 
+        temperature=0.7
+    )
     
-    # LLMに渡すメッセージを作成する
     messages = [
         SystemMessage(content=system_message),
         HumanMessage(content=user_question),
     ]
     
-    # LLMに質問を投げて、結果を受け取る
     result = llm.invoke(messages)
-    
-    # 結果からテキスト部分だけを取り出して返す
     return result.content
 
-# アプリのタイトルを設定
+# --- Streamlitアプリの画面 ---
 st.title("専門家AIチャットボット")
 
 # アプリの概要や操作方法を説明
