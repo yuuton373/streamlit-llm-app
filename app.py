@@ -1,81 +1,68 @@
 import streamlit as st
-from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain.schema import SystemMessage, HumanMessage
-import os
 
-# .envファイルから環境変数（OPENAI_API_KEY）を読み込む
-load_dotenv() 
-
-# この関数は、ユーザーの入力(user_question)と、専門家の選択(expert_choice)を
-# 引数として受け取り、LLMからの回答を返す
-def get_llm_response(user_question, expert_choice):
-    # ラジオボタンの選択に応じて、LLMの役割（システムメッセージ）を変える
+def get_llm_response(user_question, expert_choice, api_key_from_secrets):
+    
+    system_message = "" # 初期化
     if expert_choice == "ITコンサルタント":
         system_message = "あなたは優秀なITコンサルタントです。専門用語を避け、初心者にも分かりやすく回答してください。"
     elif expert_choice == "恋愛カウンセラー":
         system_message = "あなたは経験豊富な恋愛カウンセラーです。親身に、そして具体的なアドバイスをしてください。"
     elif expert_choice == "シェフ":
         system_message = "あなたは一流のシェフです。家庭でも作れる簡単なレシピのアイデアを提案してください。"
-    else:
-        # 万が一、予期せぬ選択があった場合のデフォルト設定
-        system_message = "あなたは親切なアシスタントです。"
-
-    # --- LangChainのコード（Lesson8参考） ---
-    # LLMモデル（gpt-4o-mini）を準備する
-    llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.7)
     
-    # LLMに渡すメッセージを作成する
+    llm = ChatOpenAI(
+        api_key=api_key_from_secrets, # Secretsから受け取ったキーを明示的に渡す
+        model_name="gpt-4o-mini", 
+        temperature=0.7
+    )
+    
     messages = [
         SystemMessage(content=system_message),
         HumanMessage(content=user_question),
     ]
     
-    # LLMに質問を投げて、結果を受け取る
-    result = llm.invoke(messages)
-    
-    # 結果からテキスト部分だけを取り出して返す
-    return result.content
+    try:
+        result = llm.invoke(messages)
+        return result.content
+    except Exception as e:
+        # エラーが発生した場合、より詳細な情報を表示する
+        st.error(f"LLMからの回答取得中にエラーが発生しました: {e}")
+        return None
 
-# アプリのタイトルを設定
+# --- Streamlitアプリの画面 ---
 st.title("専門家AIチャットボット")
+st.write("専門家を選択し、質問を入力してください。")
+st.divider()
 
-# アプリの概要や操作方法を説明
-st.write("##### 概要")
-st.write("このアプリは、さまざまな分野の専門家として振る舞うAIに質問できるチャットボトットです。")
-st.write("##### 操作方法")
-st.markdown("""
-1. 相談したい専門家をラジオボタンから選択してください。
-2. 下のテキストエリアに、専門家への質問や相談事を入力してください。
-3. 「AIに相談する」ボタンを押すと、AIからの回答が表示されます。
-""")
+# Secretsが正しく読み込めているかを確認
+try:
+    # SecretsからAPIキーを読み込む
+    my_api_key = st.secrets["OPENAI_API_KEY"]
 
-st.divider() # 区切り線
+    # 画面にデバッグメッセージを表示
+    st.success("SecretsからAPIキーを読み込みました。アプリは正常に動作する準備ができています。")
+    
+    # UIを表示
+    expert_choice = st.radio(
+        "どの専門家に相談しますか？",
+        ("ITコンサルタント", "恋愛カウンセラー", "シェフ")
+    )
+    user_question = st.text_area("相談したい内容を入力してください。")
 
-# ラジオボタンで専門家を選択させる
-expert_choice = st.radio(
-    "どの専門家に相談しますか？",
-    ("ITコンサルタント", "恋愛カウンセラー", "シェフ")
-)
+    if st.button("AIに相談する"):
+        st.divider()
+        if user_question:
+            with st.spinner("AIが回答を考えています..."):
+                response = get_llm_response(user_question, expert_choice, my_api_key)
+            
+            if response:
+                st.subheader("🤖 AIからの回答")
+                st.markdown(response)
+        else:
+            st.error("相談したい内容を入力してください。")
 
-# ユーザーが質問を入力するためのテキストエリア
-user_question = st.text_area("相談したい内容を入力してください。")
-
-# 実行ボタン
-if st.button("AIに相談する"):
-    st.divider() # 区切り線
-
-    # ユーザーが何か入力した場合のみ、処理を実行
-    if user_question:
-        # 処理中であることをユーザーに知らせる
-        with st.spinner("AIが回答を考えています..."):
-            # 上で定義した関数を使って、LLMからの回答を取得
-            response = get_llm_response(user_question, expert_choice)
-        
-        # 結果を表示する
-        st.subheader("🤖 AIからの回答")
-        st.markdown(response)
-
-    else:
-        # 入力がない場合はエラーメッセージを表示
-        st.error("相談したい内容を入力してください。")
+except (KeyError, FileNotFoundError):
+    st.error("エラー: StreamlitのSecretsに 'OPENAI_API_KEY' が設定されていません。")
+    st.info("アプリ管理画面の「Settings > Secrets」で、正しいAPIキーを設定してください。")
